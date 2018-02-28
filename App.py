@@ -7,6 +7,7 @@ import time
 from dialog import Dialog
 import subprocess
 import hashlib
+import urllib.request
 
 # This is almost always a good thing to do at the beginning of your programs.
 locale.setlocale(locale.LC_ALL, '')
@@ -17,20 +18,61 @@ NameConfig = ''
 
 class ConfigurationGeneral:
 	def __init__(self):
-		if not os.path.exists(NameConfig):
+		if not os.path.exists('global.cfg'):
 			open('global.cfg','w+')
+			#settingsglobal = configparser.ConfigParser()
+			#settingsglobal.optionxform = str
+			#settingsglobal.read('global.cfg')
+			#settingsglobal.add_section('Info_Certbot')
+			self.mail = ''
+			self.tel = ''
+			self.EmplacementCertbot = ''
+			self.Port = '443'
+			self.ModificationConfigGeneral()
+		if not os.path.exists("./Certbot/certbot-auto"):
+			exe = urllib.request.urlopen("https://dl.eff.org/certbot-auto")
+			os.makedirs("./Certbot/")
+			with open("./Certbot/certbot-auto register --config ./Certbot/Preload.ini","wb+") as f:
+				f.write(exe.read())
+				#-> chmod a+x
 		self.ReadAll()
-	def ReadAll():
+		self.UpdateCertbot()
+	def ReadAll(self):
 		settingsglobal = configparser.ConfigParser()
 		settingsglobal.optionxform = str
 		settingsglobal.read('global.cfg')
-		#settingsglobalfile = open("global.cfg",'r')
-		if settingsglobal.has_section('Info_Certbot') == False:
-			settingsglobal.add_section('Info_Certbot')
+		settingsglobalfile = open("global.cfg",'r')
 		self.mail = settingsglobal['Info_Certbot']['mail']
 		self.tel = settingsglobal['Info_Certbot']['tel']
 		self.EmplacementCertbot = settingsglobal['Info_Certbot']['Emplacement']
 		self.Port = settingsglobal['Info_Certbot']['Port_TLS_SNI']
+	def UpdateCertbot(self):
+		proc = subprocess.Popen(['sudo ./Certbot/certbot-auto --help'],stdout=subprocess.PIPE,stdin=subprocess.PIPE,shell=True)
+		#while proc.returncode == None:
+		print (proc.stdout.read().decode('utf-8')+"\r\n")
+		#print (proc.stderr)
+	def ModificationConfigGeneral(self):
+		ListInfo=[('Mail', 1, 2, self.mail, 1, 40, 18, 30),\
+		('Tel. (+00)', 2, 2, self.tel, 2, 40, 18, 30),\
+		('Emplacement de Certbot(Optionel)', 3, 2, self.EmplacementCertbot, 3, 40, 18, 30),\
+		('Port de communication Certbot', 4, 2, self.Port, 4, 40, 18, 30)]
+
+		Code, info = d.form("Indiquez les informations pour le fonctionnement du programme", elements=ListInfo)
+		settingsglobal = configparser.ConfigParser()
+		settingsglobal.optionxform = str
+		settingsglobal.add_section('Info_Certbot')
+		settingsglobal['Info_Certbot']['mail'] = self.mail = info[0]
+		settingsglobal['Info_Certbot']['tel'] = self.tel = info[1]
+		settingsglobal['Info_Certbot']['Emplacement'] = self.EmplacementCertbot = info[2]
+		settingsglobal['Info_Certbot']['Port_TLS_SNI'] = self.Port = info[3]
+		file = open('global.cfg','w+')
+		settingsglobal.write(file)
+		if not os.path.exists("./Certbot/certbot-auto"):
+			os.makedirs("./Certbot/")
+		preloadcertbotini = open('./Certbot/Preload.ini','w+')
+		preloadcertbotini.write('email = '+self.mail+'\r\nagree-tos = True\r\nupdate-registration = True\r\nwork-dir = ./Certbot/Worker/\r\nlogs-dir = ./Certbot/Log/\r\nconfig-dir = ./Certbot/Config/\r\nstaging = True')
+		
+		
 
 class ConfigurationWebSite:
 	def __init__(self, name):
@@ -235,7 +277,7 @@ class ConfigurationWebSite:
 				NewCNF['alt_names']['DNS.'+str(i)] = elem
 				i = i+1
 
-		settingscnffile = open('./'+self.NomConfig+'/'+self.NomConfig+'.cnf','w+') 
+		#settingscnffile = open('./'+self.NomConfig+'/'+self.NomConfig+'.cnf','w+') 
 		settingscnf.write(NewCNF)
 	def GetListDomains(self):
 		settingscnf = configparser.ConfigParser()
@@ -251,7 +293,6 @@ class ConfigurationWebSite:
 		else:
 			ListDomains = ListDomains.join(";")
 		
-
 		
 class ApplicationConfiguration:
 	def __init__(self, Config):
@@ -461,6 +502,7 @@ def Accueil():
 		OuvertureConfig("NK.cfg")
 		NameConfig.DemanderCnf()
 
+ConfigGeneral = ConfigurationGeneral()
 
 if len(sys.argv) >= 2:
 	OuvertureConfig(sys.argv[1])
