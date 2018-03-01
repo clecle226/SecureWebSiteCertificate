@@ -14,7 +14,8 @@ locale.setlocale(locale.LC_ALL, '')
 d = Dialog(dialog="dialog",autowidgetsize = "true")
 
 NameConfig = ''
-
+DEBUG = True #Staging
+AUTHENTIFICATEUR = "apache"
 
 class ConfigurationGeneral:
 	def __init__(self):
@@ -33,6 +34,7 @@ class ConfigurationGeneral:
 		if info[0] == '' or Code == Dialog.CANCEL:
 			sys.exit(0)
 		self.mail = info[0]
+		command = "./Certbot/certbot-auto register --email "+self.mail+" --work-dir ./Certbot/Worker/ --logs-dir ./Certbot/Log/ --config-dir ./Certbot/Config/"
 		if not os.path.exists("./Certbot/certbot-auto"):
 			os.makedirs("./Certbot/")
 			os.makedirs("./ChainACME/")
@@ -40,13 +42,11 @@ class ConfigurationGeneral:
 			with open("./Certbot/certbot-auto","wb+") as f:
 				f.write(exe.read())
 				os.system("chmod a+x ./Certbot/certbot-auto")
-			os.system("./Certbot/certbot-auto register --staging --email "+self.mail+" --work-dir ./Certbot/Worker/ --logs-dir ./Certbot/Log/ --config-dir ./Certbot/Config/")
 		else:
-			os.system("./Certbot/certbot-auto register --staging --update-registration --email "+self.mail+" --work-dir ./Certbot/Worker/ --logs-dir ./Certbot/Log/ --config-dir ./Certbot/Config/")
-		#preloadcertbotini = open('./Certbot/Preload.ini','w+')
-		#preloadcertbotini.write('[DEFAULT]\nemail = '+self.mail+'\nagree-tos = True\nupdate-registration = True\nwork-dir = ./Certbot/Worker/\nlogs-dir = ./Certbot/Log/\nconfig-dir = ./Certbot/Config/\nstaging = True')
-		#proc = subprocess.Popen(['./Certbot/certbot-auto register --config ./Certbot/Preload.ini'],stdout=subprocess.PIPE,stdin=subprocess.PIPE,shell=True)
-		#print (proc.stdout.read().decode('utf-8')+"\r\n")
+			command = command+" --update-registration"
+		if DEBUG == True:
+			command = command+" --staging"
+		os.system(command)
 
 		
 		
@@ -73,7 +73,7 @@ class ConfigurationWebSite:
 			self.settingsConfig['Config']['Name'] = Nom
 			self.NomConfig = self.settingsConfig['Config']['Name']
 			os.makedirs("./"+self.NomConfig+"/Archive")
-		#open(NameConfig,'r')
+
 		self.NomConfig = self.settingsConfig['Config']['Name']
 		self.AppConfig = ApplicationConfiguration(self)
 		self.VerificationConfig()
@@ -103,12 +103,12 @@ class ConfigurationWebSite:
 						Êtes-vous d'accords avec la procédure suivante?",choices=[('1', 'Confirmer la procedure'),('2', 'Activé une clé backup avant d\'activer le roll'),('3', 'Tous annuler(j\'ai encore fait de la merde avec HPKP T-T )')])
 						if code == Dialog.OK:
 							if tag == "1":
-								self.AppConfig.CreationKeyAndCsr(True)
+								self.AppConfig.CreationKey(True)
 							elif tag == "2":
 								self.AppConfig.ActivationBackup()
-								self.AppConfig.CreationKeyAndCsr(True)
+								self.AppConfig.CreationKey(True)
 					else:
-						self.AppConfig.CreationKeyAndCsr()
+						self.AppConfig.CreationKey()
 			elif tag == "2":
 				self.DemanderLevelSecurityApache("true")
 				self.AppConfig.UpdateConfApache()
@@ -251,15 +251,7 @@ class ConfigurationWebSite:
 		fichier = open('./'+self.NomConfig+'/'+self.NomConfig+'.cnf' , 'r')
 		settingscnf.read_string("[DEFAULT]\n"+fichier.read())
 		domains = (self.settingsConfig['InfoCertificate']['domaine']).split(';')
-		
-		#settingscnf[' req_distinguished_name ']['C'] = self.settingsConfig['InfoCertificate']['countryName']
-		#settingscnf[' req_distinguished_name ']['ST'] = self.settingsConfig['InfoCertificate']['stateOrProvinceName']
-		#settingscnf[' req_distinguished_name ']['L'] = self.settingsConfig['InfoCertificate']['localityName']
-		#settingscnf[' req_distinguished_name ']['O'] = self.settingsConfig['InfoCertificate']['organizationName']
-		#settingscnf[' req_distinguished_name ']['OU'] = self.settingsConfig['InfoCertificate']['countryName'] #Organizational Unit Name
-		#settingscnf[' req_distinguished_name ']['CN'] = domains[0]
-		#settingscnf[' req_distinguished_name ']['emailAddress'] = self.settingsConfig['InfoCertificate']['countryName']
-		
+
 		if len(domains) > 1:
 			settingscnf[' req ']['req_extensions'] = "v3_req"
 			settingscnf[' v3_req ']['subjectAltName'] = "@alt_names"
@@ -269,67 +261,54 @@ class ConfigurationWebSite:
 				settingscnf[' alt_names ']['DNS.'+str(i)] = elem
 				i = i+1
 
-		#settingscnffile = open('./'+self.NomConfig+'/'+self.NomConfig+'.cnf','w+') #settingscnf.write()
 		fichier.close()
 		fichier = open('./'+self.NomConfig+'/'+self.NomConfig+'.cnf' , 'w+')
 		settingscnf.write(fichier)
 		fichier.close()
 	
-	def GetListDomains(self):
-		settingscnf = configparser.ConfigParser()
-		settingscnf.optionxform = str
-		settingscnf.read('./'+self.NomConfig+'/'+self.NomConfig+'.cnf')
-		ListDomains = []
-
-		if settingscnf['req_distinguished_name']['commonName'] != "":
-			ListDomains.append(settingscnf['req_distinguished_name']['commonName'])
-		if settingscnf.has_section('alt_names'):
-			for option in settingscnf.options("alt_names"):
-				ListDomains.append(settingscnf['alt_names'][option])
-		if ListDomains.count == 0:
-			ListDomains = ""
-		else:
-			ListDomains = ";".join(ListDomains)
-		return ListDomains
 	def GetSubj(self):
 		domains = (self.settingsConfig['InfoCertificate']['domaine']).split(';')
 		subj = "'/C="+self.settingsConfig['InfoCertificate']['countryName']+"/ST="+self.settingsConfig['InfoCertificate']['stateOrProvinceName']+"/L="+self.settingsConfig['InfoCertificate']['localityName']+"/O="+self.settingsConfig['InfoCertificate']['organizationName']+"/OU=null/CN="+domains[0]
-		"""if len(domains) > 1:
-			subj = subj+"/subjectAltName="
-			i = 1
-			for elem in domains:
-				if i > 1:
-					subj = subj+', '
-				subj = subj+'DNS.'+str(i)+'='+elem
-				i = i+1
-		"""
+		
 		subj = subj+"'"
 		return subj
+		
+	def CronUpdate(self):
+		self.AppConfig.UpdateGlobal()
 		
 class ApplicationConfiguration:
 	def __init__(self, Config):
 		self.Config = Config
 		self.Nom = self.Config.GetConfig("Config","Name")
-		
-	def CreationKeyAndCsr(self,Roll = False):
+	
+	def ActivationRoll(self, DemandeRoll = "Backup1"):
 		TimeArchives = str(int(time.time()))
 		
-		if Roll and self.Config.GetConfig('Current','ActiveCertificate') != "Roll":
-			shutil.copy("./"+self.Nom+"/"+self.Config.GetConfig('Current','ActiveCertificate')+".key", "./"+self.Nom+"/Roll.key")
-			shutil.copy("./"+self.Nom+"/"+self.Config.GetConfig('Current','ActiveCertificate')+".csr", "./"+self.Nom+"/Roll.csr")
-			self.Config.SetConfig('ActiveCertificate',"Roll") 
-			self.Config.SetConfig('EndRoll',time.time()+5184000)
-			#AppelACME()
-			#Generation Certbot Roll
+		os.system("rm ./"+self.Nom+"/Roll.*")
+		shutil.copy("./"+self.Nom+"/"+self.Config.GetConfig('Current','ActiveCertificate')+".key", "./"+self.Nom+"/Roll.key")
+		self.Config.SetConfig('ActiveCertificate',"Roll")
+		self.Config.SetConfig('ActualBackupActivate', DemandeRoll) 
+		self.Config.SetConfig('EndRoll',time.time()+5184000)
+		if DemandeRoll == "Backup1":
+			CreationKey(Main = True, Backup1 = False, Backup2 = False)
+		if DemandeRoll == "Backup2":
+			CreationKey(Main = True, Backup1 = True, Backup2 = False)
+		self.UpdateConfApache()#Avec HPKP, génération nouvelle clé
+
+			
+	def CreationKey(self,Main = True, Backup1 = True, Backup2 = True):
+		TimeArchives = str(int(time.time()))
+		
 		######################################	
 			####Deplacement old file#########
 		if os.path.exists("./"+self.Nom+"/Main.key") or os.path.exists("./"+self.Nom+"/Backup1.key") or os.path.exists("./"+self.Nom+"/Backup2.key") or os.path.exists("./"+self.Nom+"/Main.csr") or os.path.exists("./"+self.Nom+"/Backup1.csr") or os.path.exists("./"+self.Nom+"/Backup2.csr"):
 			os.makedirs("./"+self.Nom+"/Archive/"+TimeArchives+"/")
-		if os.path.exists("./"+self.Nom+"/Main.key"):
+			
+		if os.path.exists("./"+self.Nom+"/Main.key") and Main == True:
 			shutil.move("./"+self.Nom+"/Main.key", "./"+self.Nom+"/Archive/"+TimeArchives+"/Main.key")
-		if os.path.exists("./"+self.Nom+"/Backup1.key"):
+		if os.path.exists("./"+self.Nom+"/Backup1.key") and Backup1 == True:
 			shutil.move("./"+self.Nom+"/Backup1.key", "./"+self.Nom+"/Archive/"+TimeArchives+"/Backup1.key")
-		if os.path.exists("./"+self.Nom+"/Backup2.key"):
+		if os.path.exists("./"+self.Nom+"/Backup2.key") and Backup2 == True:
 			shutil.move("./"+self.Nom+"/Backup2.key", "./"+self.Nom+"/Archive/"+TimeArchives+"/Backup2.key")
 		if os.path.exists("./"+self.Nom+"/Main.csr"):
 			shutil.move("./"+self.Nom+"/Main.csr", "./"+self.Nom+"/Archive/"+TimeArchives+"/Main.csr")
@@ -339,42 +318,58 @@ class ApplicationConfiguration:
 			shutil.move("./"+self.Nom+"/Backup2.csr", "./"+self.Nom+"/Archive/"+TimeArchives+"/Backup2.csr")
 		################################################
 		if self.Config.GetConfig('Config','LevelCertificate') == "Haut":
-			os.system("openssl ecparam -genkey -name secp384r1 > ./"+self.Nom+"/Main.key")
-			os.system("openssl ecparam -genkey -name secp384r1 > ./"+self.Nom+"/Backup1.key")
-			os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 4096")
+			if Main == True:
+				os.system("openssl ecparam -genkey -name secp384r1 > ./"+self.Nom+"/Main.key")
+			if Backup1 == True:
+				os.system("openssl ecparam -genkey -name secp384r1 > ./"+self.Nom+"/Backup1.key")
+			if Backup2 == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 4096")
 		elif self.Config.GetConfig('Config','LevelCertificate') == "Moyen":
-			os.system("openssl genrsa -out ./"+self.Nom+"/Main.key 4096")
-			os.system("openssl genrsa -out ./"+self.Nom+"/Backup1.key 4096")
-			os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 2048")
+			if Main == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Main.key 4096")
+			if Backup1 == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Backup1.key 4096")
+			if Backup2 == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 2048")
 		elif self.Config.GetConfig('Config','LevelCertificate') == "Bas":
-			os.system("openssl genrsa -out ./"+self.Nom+"/Main.key 2048")
-			os.system("openssl genrsa -out ./"+self.Nom+"/Backup1.key 2048")
-			os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 2048")
-		self.Config.SetConfig('ActiveCertificate',self.Config.GetConfig('Current', 'ActiveCertificate', 'Main'))
-		#self.Config.GetConfig('ActiveCertificate'] = (settingsConfig['Current')).get('ActiveCertificate', "Main")# le certificat actif le principale ou une backup
+			if Main == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Main.key 2048")
+			if Backup1 == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Backup1.key 2048")
+			if Backup1 == True:
+				os.system("openssl genrsa -out ./"+self.Nom+"/Backup2.key 2048")
+				
+		self.Config.SetConfig('ActiveCertificate',self.Config.GetConfig('Current', 'ActiveCertificate', 'Main'))#si pas d'activate alors Main
+
 		self.Config.SetConfig('LastRenew',TimeArchives)
 		###############################################
 
-		AppelACME()
-		#Generation Certbot self.Config.GetConfig('ActiveCertificate')
+		self.AppelACME()
+		
 	def UpdateGlobal(self):
 		if float(self.Config.GetConfig('Current','EndRoll')) < time.time():#Fin du roll
 			self.Config.SetConfig('ActiveCertificate',"Main")
-			self.Config.SetConfig('LastRenew',TimeArchives)
 			self.Config.SetConfig('EndRoll',0)
-			AppelACME()
-			#Requete du certbot Roll
-		elif self.Config.GetConfig('Current','EndRoll') == "0":
-			if time.time() >= int(self.Config.GetConfig('Current','LastRenew'))+int(self.Config.GetConfig('Current','TimeRenew')):# temps pour le renuvellement depasser
-				AppelACME()
-				#Requete pour renouvellement crt
+			if self.Config.GetConfig('Current','ActualBackupActivate') == "Backup1":
+				CreationKey(Main = False, Backup1 = True, Backup2 = False)
+			if self.Config.GetConfig('Current','ActualBackupActivate') == "Backup2":
+				CreationKey(Main = False, Backup1 = False, Backup2 = True)
+			self.UpdateConfApache()#Avec HPKP, génération nouvelle clé
+			
+			AppelACME()#Requete du certbot Roll
+		elif float(self.Config.GetConfig('Current','EndRoll')) > time.time() and time.time() >= int(self.Config.GetConfig('Current','LastRenew'))+int(self.Config.GetConfig('Current','TimeRenew')):#Roll NonFini mais renouvellement depasser
+			AppelACME()#Requete pour renouvellement crt
+		elif self.Config.GetConfig('Current','ActiveCertificate') == "Main" and time.time() >= int(self.Config.GetConfig('Current','LastRenew'))+int(self.Config.GetConfig('Current','TimeRenew')):# temps pour le renuvellement depasser:
+			AppelACME()#Requete pour renouvellement crt
+				
+
 	def AppelACME(self):
-		#AppDir = os.getcwd()
-		#os.chdir(AppDir+"/ToACME/")
 		CurrentKeyUse = self.Config.GetConfig('Current','ActiveCertificate')
-		
-		if os.path.exists("./"+self.Nom+"/"+CurrentKeyUse+".csr"):
+		self.Config.SetConfig('LastRenew',TimeArchives)
+		if not os.path.exists("./"+self.Nom+"/"+CurrentKeyUse+".csr"):
+			self.Config.CreationCNFTemp()
 			os.system("openssl req -new -sha384 -key ./"+self.Nom+"/"+CurrentKeyUse+".key -nodes -out ./"+self.Nom+"/"+CurrentKeyUse+".csr -outform pem -subj "+self.Config.GetSubj()+" -config ./"+self.Nom+"/"+self.Nom+".cnf")
+			os.system("sudo rm ./"+self.Nom+"/"+self.Nom+".cnf")
 		
 		TimeArchives = str(int(time.time()))
 		if os.path.exists("./"+self.Nom+"/"+CurrentKeyUse+"_fullchain.pem") or os.path.exists("./"+self.Nom+"/"+CurrentKeyUse+"_crt.pem"):
@@ -384,10 +379,10 @@ class ApplicationConfiguration:
 			os.system("sudo rm ./"+self.Nom+"/Actual_FC.pem")
 			os.system("sudo rm ./"+self.Nom+"/Actual_key.pem")
 		
-		os.system("sudo ./Certbot/certbot-auto certonly -a apache --csr ./"+self.Nom+"/"+CurrentKeyUse+".csr --staging --cert-path ./"+self.Nom+"/"+CurrentKeyUse+"_crt.pem --fullchain-path ./"+self.Nom+"/"+CurrentKeyUse+"_fullchain.pem --chain-path ./ChainACME/Chain.pem.tmp --work-dir ./Certbot/Worker/ --logs-dir ./Certbot/Log/ --config-dir ./Certbot/Config/") #sudo ./../certbot/certbot-auto certonly --csr ./NoKnow/Main.csr --standalone --tls-sni-01-port 26226 --staging --cert-path ./NoKnow/Main_crt.pem --fullchain-path ./NoKnow/Main_fullchain.pem --chain-path ./ChainACME/Chain.pem.tmp
-		#--cert-path ./NoKnow/Main_crt.pem
-		#--fullchain-path ./NoKnow/Main_fullchain.pem
-		#--chain-path ./ChainACME/Chain.pem.tmp
+		command = "sudo ./Certbot/certbot-auto certonly -a "+AUTHENTIFICATEUR+" --csr ./"+self.Nom+"/"+CurrentKeyUse+".csr --cert-path ./"+self.Nom+"/"+CurrentKeyUse+"_crt.pem --fullchain-path ./"+self.Nom+"/"+CurrentKeyUse+"_fullchain.pem --chain-path ./ChainACME/Chain.pem.tmp --work-dir ./Certbot/Worker/ --logs-dir ./Certbot/Log/ --config-dir ./Certbot/Config/"
+		if DEBUG == True:
+			command = command+" --staging"
+		os.system(command)
 		
 		os.system("sudo ln -s ./"+self.Nom+"/"+CurrentKeyUse+"_fullchain.pem ./"+self.Nom+"/Actual_FC.pem")
 		os.system("sudo ln -s ./"+self.Nom+"/"+CurrentKeyUse+".key ./"+self.Nom+"/Actual_key.pem")
@@ -418,6 +413,7 @@ class ApplicationConfiguration:
 		#hash = str(proc.stdout.read()).split(" ")
 		#hash = (hash[1]).replace("\\n'", "")
 		#print(hash)
+		#Don't work#########################################################
 		
 		ListDomains = self.Config.GetConfig('InfoCertificate','domaine').split(';')
 		for domain in ListDomains:
@@ -429,45 +425,76 @@ class ApplicationConfiguration:
 				###############TLSA###############
 				#DemiZoneFile.write("_443._tcp."+domain+".	IN TLSA 3 1 1 "+hash+"\n")
 			
-
 	def UpdateConfApache(self):
 		ApacheInFile = open("./"+self.Nom+"/Apache.conf",'w+')#in virtualhost
-		#ApacheOutFile = open("./"+self.Nom+"/ApacheOut.conf",'w+')#out virtualhost
 		AppDir = os.getcwd()
 		
-		ApacheInFile.write("SSLCertificateFile "+AppDir+"/"+self.Nom+"/Actual_FC.pem\n\
-		SSLCertificateKeyFile "+AppDir+"/"+self.Nom+"/Actual_key.pem\n")
+		ApacheInFile.write("SSLCertificateFile "+AppDir+"/"+self.Nom+"/Actual_FC.pem\nSSLCertificateKeyFile "+AppDir+"/"+self.Nom+"/Actual_key.pem\n")
 		if self.Config.GetConfig('Config','LevelApache') == "Haut":
 			ApacheInFile.write("Include "+AppDir+"/Apache/ApacheHaut.conf\n")
 		elif self.Config.GetConfig('Config','LevelApache') == "Moyen":
 			ApacheInFile.write("Include "+AppDir+"/Apache/ApacheMoyen.conf\n")
 		elif self.Config.GetConfig('Config','LevelApache') == "Bas":
 			ApacheInFile.write("Include "+AppDir+"/Apache/ApacheBas.conf\n")
-		if self.Config.GetConfig('Config','OCSPStaplingActivate') == "True":
+
+		if self.Config.GetConfig('Config','OCSPStaplingActivate') == "true":
 			ApacheInFile.write("Include "+AppDir+"/Apache/OCSP.conf\n")
-		if self.Config.GetConfig('Config','HSTSActivate') == "True":
+		if self.Config.GetConfig('Config','HSTSActivate') == "true":
 			ApacheInFile.write('Header always set Strict-Transport-Security "max-age=15768000; includeSubDomains; preload"\n')
+		if self.Config.GetConfig('Config','HPKPActivate') == "true":
+			ApacheInFile.write(self.CalculHPKP())
+			
+	def CalculHPKP(self):
+		if self.Config.GetConfig('Config','LevelCertificate') == "Haut":
+			MainHash = (os.popen("openssl ec -in ./"+self.Nom+"/Main.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup1Hash = (os.popen("openssl ec -in ./"+self.Nom+"/Backup1.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup2Hash = (os.popen("openssl rsa -in ./"+self.Nom+"/Backup2.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+		elif self.Config.GetConfig('Config','LevelCertificate') == "Moyen":
+			MainHash = (os.popen("openssl rsa -in ./"+self.Nom+"/Main.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup1Hash = (os.popen("openssl rsa -in ./"+self.Nom+"/Backup1.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup2Hash = (os.popen("openssl rsa -in ./"+self.Nom+"/Backup2.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+		elif self.Config.GetConfig('Config','LevelCertificate') == "Bas":
+			MainHash = (os.popen("openssl rsa -in ./"+self.Nom+"/Main.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup1Hash = (os.popen("openssl rsa -in ./"+self.Nom+"/Backup1.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+			Backup2Hash = (os.popen("openssl rsa -in ./"+self.Nom+"/Backup2.key -outform der -pubout | openssl dgst -sha256 -binary | openssl enc -base64").read()).strip("\n")
+		return 'Header always set Public-Key-Pins "pin-sha256=\\"'+MainHash+'\\"; pin-sha256=\\"'+Backup1Hash+'\\"; pin-sha256=\\"'+Backup2Hash+'\\"; max-age=5184000; includeSubDomains"'
 		
 	def ActivationBackup(self):
-		if self.Config.GetConfig('Current','ActiveCertificate') == "Roll":
-			d.msgbox("Vous êtes actuellement en Roll à cause de HPKP\n\
-			Le programme refuse de faire automatiquement, si vous insistez faite le manuellement.")
+		if self.Config.GetConfig('Current','ActiveCertificate') == "Roll" and self.Config.GetConfig('Current','ActualBackupActivate') == "Backup2":
+			d.msgbox("Vous êtes actuellement en roll Backup2 pour HPKP\n\
+Le programme refuse de faire automatiquement, si vous insistez faite le manuellement.\n\
+Si vous le faites sachez que vous risqué de casser les services géré par ce projet.")
 		else:
 			d.msgbox("L'activation du backup revokera automatiquement les certificat précédent\n NB: il régènerera pas les clé automatiquement")
+			if self.Config.GetConfig('Current','ActiveCertificate') == "Main":
+				menuchoices =[('Backup1', 'Backup online'),('Backup2', 'Backup offline')]
+			elif self.Config.GetConfig('Current','ActualBackupActivate') == "Backup1":
+				menuchoices =[('Backup2', 'Backup offline')]
 			code, tag = d.menu("Le certificat activé actuel est le "+self.Config.GetConfig('Current','ActiveCertificate')+". Lequel voulez-vous activer?",
-			choices=[('Main', 'Le certificat principale'),('Backup1', 'Backup online'),('Backup2', 'Backup offline')], title="Security")
+			choices=menuchoices, title="Security")
 			if code == Dialog.OK:
-				if tag == self.Config.GetConfig('Current','ActiveCertificate'):
-					d.msgbox("Bravo le génie, on sent que tu as eu ton bac avec mention...")
-				else:
-					self.Config.SetConfig('ActiveCertificate',tag)
-					AppelACME()
+				if tag == "Backup2":
+					retour = d.yesno("Attention!!! Ceci est la dernière backup valide... Si vous activer cette backup vous devrez attendre la fin du roll avant toutes modification des clé HPKP\nÊtes-vous de votre action?")
+					if retour == "no":
+						return ""
+					retour = d.yesno("Cette action va recréer les key de Main et/ou Backup1 après le lancement du Roll et changer en consequence HPKP.\nSi vous voulez utiliser Backup2 merci de la mettre à l'adresse ./"+self.Nom+"/Backup2.key\n Voulez-vous continuer?")
+					if retour == "yes":
+						ActivationRoll(tag)
+					else:
+						return ""
 	def PrintInclusion(self):
+		self.CalculHPKP()
 		self.UpdateConfApache()
-		self.UpdateZone()
-		d.msgbox("Apache config file(in virtualhost):\n Include ./"+self.Nom+"/Apache.conf\n\
-Bind(DNS server) config file:\n Include ./"+self.Nom+"/HalfZone.conf\n")
+		Msg = "Apache config file(in virtualhost):\n Include ./"+self.Nom+"/Apache.conf\n"
+		if self.Config.GetConfig('Config','DNSCAActivate') == "true" or self.Config.GetConfig('Config','TLSAActivate') == "true":
+			self.UpdateZone()
+			Msg = Msg+"Bind(DNS server) config file:\n Include ./"+self.Nom+"/HalfZone.conf\n"
+		d.msgbox(Msg)
+
 	def MainMenu(self):
+		if not os.path.exists("./"+self.Nom+"/"+self.Config.GetConfig('Current','ActiveCertificate')+"_fullchain.pem") or not os.path.exists("./"+self.Nom+"/"+self.Config.GetConfig('Current','ActiveCertificate')+"_crt.pem"):
+			self.CreationKey()
+			self.PrintInclusion()
 		code = 1
 		while code != Dialog.CANCEL:
 			code, tag = d.menu("Que voulez vous faire?",
@@ -478,9 +505,9 @@ Bind(DNS server) config file:\n Include ./"+self.Nom+"/HalfZone.conf\n")
 				self.Config.ModificationConfig()
 			elif tag == "3":
 				if self.Config.GetConfig('Config','HPKPActivate') == "true" and self.Config.GetConfig('Current', 'EndRoll', 'null') != 'null':
-					self.CreationKeyAndCsr(True)
+					self.CreationKey(True)
 				else:
-					self.CreationKeyAndCsr()
+					self.CreationKey()
 			elif tag == "4":
 				self.AppelACME()
 			elif tag == "5":
@@ -500,13 +527,11 @@ def OuvertureConfig(NameConfigtmp=""):
 		for elem in listConfigAvailable:
 			if '.cfg' in elem and elem != 'global.cfg':
 				i = i+1
-				listFinal.append((str(i), elem, 'off'))
+				listFinal.append((str(i), elem))
 				
-		code, tag = d.radiolist("Quel configuration modifier?",
+		code, tag = d.menu("Quel configuration modifier?",
 					   choices=listFinal, title="Choix Config")
-		if code == Dialog.CANCEL or tag == '':
-			sys.exit(0)
-		else:
+		if code != Dialog.CANCEL and tag != '':
 			for elem in listFinal:
 				if elem[0] == tag:
 					NameConfig = ConfigurationWebSite(elem[1])
@@ -525,15 +550,13 @@ def DemandeBinaire(Msg):
 			return "false"
 	else:
 		return "true"
-''''''
-#def DemanderCertificateTransparency():
 
 def Accueil():
 	global NameConfig
 	code = 1
 	while code != Dialog.CANCEL:
 		code, tag = d.menu("Que voulez vous faire?",
-			choices=[('1', 'Nouveau'),('2', 'Ouvrir'),('3', 'Test')], title="Security")
+			choices=[('1', 'Nouveau'),('2', 'Ouvrir')], title="Security")
 
 		if tag == "1":
 			code, NameFile = d.inputbox("Choisir un nom de projet:")
@@ -541,15 +564,26 @@ def Accueil():
 				OuvertureConfig(NameFile+".cfg")
 		elif tag == "2":
 			OuvertureConfig()
-		elif tag == "3":
-			OuvertureConfig("NK.cfg")
-			NameConfig.DemanderCnf()
 	sys.exit(0)
 
 ConfigGeneral = ConfigurationGeneral()
 
-if len(sys.argv) >= 2:
-	OuvertureConfig(sys.argv[1])
+if len(sys.argv) == 2:
+	if sys.argv[1] == "--debug":
+		OuvertureConfig("Test.cfg")
+		#NameConfig.AppConfig.CalculHPKP()
+	else:
+		OuvertureConfig(sys.argv[1])
+elif len(sys.argv) >= 3:
+	if sys.argv[1] == "--cron":
+		if sys.argv[2] == "all":
+			listConfigAvailable = os.listdir('./');
+			for elem in listConfigAvailable:
+				if '.cfg' in elem and elem != 'global.cfg':
+					OuvertureConfig(elem)
+					NameConfig.CronUpdate()
+			else:
+				OuvertureConfig(sys.argv[2])
+				NameConfig.CronUpdate()
 else:
 	Accueil()
-#VerificationConfig()
